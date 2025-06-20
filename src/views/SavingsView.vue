@@ -230,7 +230,7 @@ export default {
       savingItems: state => state.financialData.savings.items,
       customSavingItems: state => state.financialData.savings.customItems
     }),
-    ...mapGetters([
+    ...mapGetters('financialData', [
       'totalMonthlySavings',
       'totalSaved',
       'savingsRate'
@@ -242,7 +242,11 @@ export default {
     }
   },
   methods: {
-    ...mapMutations(['updateSavingItem', 'addCustomSaving', 'deleteCustomSaving']),
+    ...mapMutations('financialData', [
+      'updateSavingItem',
+      'addCustomSaving',
+      'deleteCustomSaving'
+    ]),
     handleInput(event, id, field, isCustom) {
       const value = event.target.value
       const numericValue = Number(unformatNumber(value))
@@ -267,7 +271,7 @@ export default {
         alert('Por favor, ingrese un nombre para el ahorro')
         return
       }
-      this.$store.commit('addCustomSaving', {
+      this.$store.commit('financialData/addCustomSaving', {
         name: this.newSaving.name,
         monthlyAmount: Number(unformatNumber(this.newSaving.monthlyAmount)) || 0,
         totalSaved: Number(unformatNumber(this.newSaving.totalSaved)) || 0,
@@ -277,7 +281,7 @@ export default {
     },
     deleteCustomSaving(id) {
       if (confirm('¿Está seguro de que desea eliminar este ahorro?')) {
-        this.$store.commit('deleteCustomSaving', id)
+        this.$store.commit('financialData/deleteCustomSaving', id)
       }
     },
     cancelAddSaving() {

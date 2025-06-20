@@ -1,378 +1,181 @@
 <template>
-  <div class="dashboard">
-    <div class="dashboard-header">
-      <h2>Panel de Control Financiero</h2>
-      <div class="financial-score">
-        <div class="score-circle" :class="financialScoreClass">
-          {{ financialScore }}
+  <div class="dashboard-container">
+    <header class="dashboard-header">
+      <h1>Panel de Control - Flujos de Caja</h1>
+      <div class="user-actions">
+        <span>{{ currentUser.email }}</span>
+        <button @click="logout" class="logout-btn">Cerrar Sesión</button>
+      </div>
+    </header>
+
+    <div class="dashboard-content">
+      <div class="actions-bar">
+        <button @click="showNewCashFlowForm = true" class="new-btn">
+          Nuevo Flujo de Caja
+        </button>
+      </div>
+
+      <div v-if="loading" class="loading">
+        Cargando...
+      </div>
+
+      <div v-else-if="error" class="error-message">
+        {{ error }}
+      </div>
+
+      <div v-else class="cash-flows-list">
+        <div v-if="allCashFlows.length === 0" class="no-data">
+          No hay flujos de caja registrados. ¡Crea uno nuevo!
         </div>
-        <div class="score-details">
-          <h3>Puntuación Financiera</h3>
-          <p>{{ financialScoreMessage }}</p>
+        
+        <div v-else class="cash-flow-cards">
+          <div v-for="cashFlow in allCashFlows" :key="cashFlow.id" class="cash-flow-card">
+            <h3>{{ cashFlow.title }}</h3>
+            <p class="date">Creado: {{ formatDate(cashFlow.createdAt) }}</p>
+            <div class="card-actions">
+              <button @click="viewCashFlow(cashFlow)" class="view-btn">Ver</button>
+              <button @click="editCashFlow(cashFlow)" class="edit-btn">Editar</button>
+              <button @click="confirmDelete(cashFlow)" class="delete-btn">Eliminar</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="dashboard-grid">
-      <div class="dashboard-card">
-        <h3>Resumen de Flujo de Caja</h3>
-        <div class="summary-content">
-          <div class="summary-item">
-            <span class="label">Ingresos Totales</span>
-            <span class="value">{{ formatCurrency(totalIncome) }}</span>
-            <div class="progress-bar">
-              <div class="progress income" style="width: 100%"></div>
-            </div>
+    <!-- Modal para nuevo/editar flujo de caja -->
+    <div v-if="showNewCashFlowForm" class="modal">
+      <div class="modal-content">
+        <h2>{{ editingCashFlow ? 'Editar' : 'Nuevo' }} Flujo de Caja</h2>
+        <form @submit.prevent="handleSubmit">
+          <div class="form-group">
+            <label for="title">Título</label>
+            <input
+              type="text"
+              id="title"
+              v-model="cashFlowForm.title"
+              required
+            >
           </div>
-          <div class="summary-item">
-            <span class="label">Gastos Totales</span>
-            <span class="value">{{ formatCurrency(totalExpenses) }}</span>
-            <div class="progress-bar">
-              <div class="progress expenses" :style="{ width: expensesPercentage + '%' }"></div>
-            </div>
-          </div>
-          <div class="summary-item">
-            <span class="label">Flujo de Caja Neto</span>
-            <span class="value" :class="{ negative: netCashFlow < 0, positive: netCashFlow > 0 }">
-              {{ formatCurrency(netCashFlow) }}
-            </span>
-            <div class="progress-bar">
-              <div class="progress" :class="netCashFlowClass" :style="{ width: netCashFlowPercentage + '%' }"></div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="dashboard-card">
-        <h3>Análisis Financiero</h3>
-        <div class="analysis-content">
-          <div class="indicator">
-            <div class="indicator-header">
-              <span class="label">Tasa de Ahorro</span>
-              <span class="value" :class="savingsRateClass">{{ savingsRate }}%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress" :style="{ width: `${savingsRate}%` }" :class="savingsRateClass"></div>
-            </div>
-            <span class="indicator-message">{{ savingsRateMessage }}</span>
+          <div class="form-group">
+            <label for="description">Descripción</label>
+            <textarea
+              id="description"
+              v-model="cashFlowForm.description"
+              rows="3"
+            ></textarea>
           </div>
-          <div class="indicator">
-            <div class="indicator-header">
-              <span class="label">Ratio Deuda/Ingreso</span>
-              <span class="value" :class="debtRatioClass">{{ debtToIncomeRatio }}%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress" :style="{ width: `${debtToIncomeRatio}%` }" :class="debtRatioClass"></div>
-            </div>
-            <span class="indicator-message">{{ debtRatioMessage }}</span>
-          </div>
-          <div class="indicator">
-            <div class="indicator-header">
-              <span class="label">Ratio Gastos Fijos</span>
-              <span class="value" :class="fixedExpensesRatioClass">{{ fixedExpensesRatio }}%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress" :style="{ width: `${fixedExpensesRatio}%` }" :class="fixedExpensesRatioClass"></div>
-            </div>
-            <span class="indicator-message">{{ fixedExpensesRatioMessage }}</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="dashboard-card">
-        <h3>Distribución de Gastos</h3>
-        <div class="expenses-content">
-          <div class="expense-item">
-            <div class="expense-header">
-              <span class="label">Gastos Fijos</span>
-              <span class="value">{{ formatCurrency(totalFixedExpenses) }}</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress fixed" :style="{ width: fixedExpensesPercentage + '%' }"></div>
-            </div>
-            <span class="percentage">{{ fixedExpensesPercentage }}% del total</span>
+          <div class="form-actions">
+            <button type="button" @click="closeForm" class="cancel-btn">
+              Cancelar
+            </button>
+            <button type="submit" class="save-btn">
+              {{ editingCashFlow ? 'Actualizar' : 'Crear' }}
+            </button>
           </div>
-          <div class="expense-item">
-            <div class="expense-header">
-              <span class="label">Gastos Variables</span>
-              <span class="value">{{ formatCurrency(totalVariableExpenses) }}</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress variable" :style="{ width: variableExpensesPercentage + '%' }"></div>
-            </div>
-            <span class="percentage">{{ variableExpensesPercentage }}% del total</span>
-          </div>
-          <div class="expense-item">
-            <div class="expense-header">
-              <span class="label">Pagos de Deudas</span>
-              <span class="value">{{ formatCurrency(totalMonthlyDebtPayments) }}</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress debt" :style="{ width: debtPaymentsPercentage + '%' }"></div>
-            </div>
-            <span class="percentage">{{ debtPaymentsPercentage }}% del total</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-card">
-        <h3>Objetivos y Progreso</h3>
-        <div class="goals-content">
-          <div class="goal-item">
-            <div class="goal-header">
-              <span class="label">Ahorro de Emergencia</span>
-              <span class="value">{{ formatCurrency(emergencyFundSaved) }}</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress emergency" :style="{ width: emergencyFundProgress + '%' }"></div>
-            </div>
-            <span class="goal-target">Meta: {{ formatCurrency(emergencyFundGoal) }}</span>
-          </div>
-          <div class="goal-item">
-            <div class="goal-header">
-              <span class="label">Inversiones</span>
-              <span class="value">{{ formatCurrency(investmentsSaved) }}</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress investment" :style="{ width: investmentsProgress + '%' }"></div>
-            </div>
-            <span class="goal-target">Meta: {{ formatCurrency(investmentsGoal) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-card recommendations-card">
-        <h3>Recomendaciones Personalizadas</h3>
-        <div class="recommendations-content">
-          <div v-if="recommendations.length > 0" class="recommendations-list">
-            <div v-for="(rec, index) in recommendations" :key="index" class="recommendation-item" :class="rec.type">
-              <i :class="rec.icon"></i>
-              <div class="recommendation-text">
-                <h4>{{ rec.title }}</h4>
-                <p>{{ rec.description }}</p>
-              </div>
-            </div>
-          </div>
-          <div v-else class="no-recommendations">
-            <i class="fas fa-check-circle"></i>
-            <p>¡Excelente! Tus finanzas están en buen estado.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-card actions-card">
-        <h3>Acciones Rápidas</h3>
-        <div class="actions-grid">
-          <button class="action-btn" @click="exportData">
-            <i class="fas fa-download"></i>
-            Exportar Datos
-          </button>
-          <button class="action-btn" @click="resetData">
-            <i class="fas fa-redo"></i>
-            Reiniciar Datos
-          </button>
-          <button class="action-btn" @click="generateReport">
-            <i class="fas fa-file-pdf"></i>
-            Generar Reporte
-          </button>
-          <button class="action-btn" @click="showTips">
-            <i class="fas fa-lightbulb"></i>
-            Consejos Financieros
-          </button>
-        </div>
+        </form>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { mapState, mapGetters, mapMutations } from 'vuex'
-import { formatCurrency } from '@/utils/formatters'
+import { mapGetters, mapActions } from 'vuex'
 
 export default {
-  name: 'DashboardView',
-  computed: {
-    ...mapState({
-      financialData: state => state.financialData
-    }),
-    ...mapGetters([
-      'totalIncome',
-      'totalExpenses',
-      'netCashFlow',
-      'savingsRate',
-      'debtToIncomeRatio',
-      'fixedExpensesRatio',
-      'totalFixedExpenses',
-      'totalVariableExpenses',
-      'totalMonthlyDebtPayments',
-      'financialScore'
-    ]),
-    expensesPercentage() {
-      return this.totalIncome ? Math.min(100, Math.round((this.totalExpenses / this.totalIncome) * 100)) : 0
-    },
-    netCashFlowPercentage() {
-      return this.totalIncome ? Math.min(100, Math.round((Math.abs(this.netCashFlow) / this.totalIncome) * 100)) : 0
-    },
-    netCashFlowClass() {
-      return this.netCashFlow >= 0 ? 'positive' : 'negative'
-    },
-    fixedExpensesPercentage() {
-      const total = this.totalExpenses + this.totalMonthlyDebtPayments
-      return total ? Math.round((this.totalFixedExpenses / total) * 100) : 0
-    },
-    variableExpensesPercentage() {
-      const total = this.totalExpenses + this.totalMonthlyDebtPayments
-      return total ? Math.round((this.totalVariableExpenses / total) * 100) : 0
-    },
-    debtPaymentsPercentage() {
-      const total = this.totalExpenses + this.totalMonthlyDebtPayments
-      return total ? Math.round((this.totalMonthlyDebtPayments / total) * 100) : 0
-    },
-    savingsRateClass() {
-      if (this.savingsRate >= 20) return 'good'
-      if (this.savingsRate >= 10) return 'warning'
-      return 'poor'
-    },
-    savingsRateMessage() {
-      if (this.savingsRate >= 20) return 'Excelente tasa de ahorro'
-      if (this.savingsRate >= 10) return 'Tasa de ahorro moderada'
-      return 'Necesitas aumentar tus ahorros'
-    },
-    debtRatioClass() {
-      if (this.debtToIncomeRatio <= 30) return 'good'
-      if (this.debtToIncomeRatio <= 40) return 'warning'
-      return 'poor'
-    },
-    debtRatioMessage() {
-      if (this.debtToIncomeRatio <= 30) return 'Nivel de deuda saludable'
-      if (this.debtToIncomeRatio <= 40) return 'Nivel de deuda moderado'
-      return 'Nivel de deuda alto'
-    },
-    fixedExpensesRatioClass() {
-      if (this.fixedExpensesRatio <= 40) return 'good'
-      if (this.fixedExpensesRatio <= 50) return 'warning'
-      return 'poor'
-    },
-    fixedExpensesRatioMessage() {
-      if (this.fixedExpensesRatio <= 40) return 'Gastos fijos controlados'
-      if (this.fixedExpensesRatio <= 50) return 'Gastos fijos moderados'
-      return 'Gastos fijos elevados'
-    },
-    financialScoreClass() {
-      if (this.financialScore >= 80) return 'excellent'
-      if (this.financialScore >= 60) return 'good'
-      if (this.financialScore >= 40) return 'warning'
-      return 'poor'
-    },
-    financialScoreMessage() {
-      if (this.financialScore >= 80) return 'Excelente salud financiera'
-      if (this.financialScore >= 60) return 'Buena salud financiera'
-      if (this.financialScore >= 40) return 'Salud financiera regular'
-      return 'Necesita atención urgente'
-    },
-    emergencyFundSaved() {
-      return this.financialData.savings.items.find(item => item.name === 'Ahorro de Emergencia')?.totalSaved || 0
-    },
-    emergencyFundGoal() {
-      return this.financialData.savings.items.find(item => item.name === 'Ahorro de Emergencia')?.goal || 0
-    },
-    emergencyFundProgress() {
-      return this.emergencyFundGoal ? Math.min(100, Math.round((this.emergencyFundSaved / this.emergencyFundGoal) * 100)) : 0
-    },
-    investmentsSaved() {
-      return this.financialData.savings.items.find(item => item.name === 'Inversiones Mensuales')?.totalSaved || 0
-    },
-    investmentsGoal() {
-      return this.financialData.savings.items.find(item => item.name === 'Inversiones Mensuales')?.goal || 0
-    },
-    investmentsProgress() {
-      return this.investmentsGoal ? Math.min(100, Math.round((this.investmentsSaved / this.investmentsGoal) * 100)) : 0
-    },
-    recommendations() {
-      const recs = []
-
-      if (this.savingsRate < 20) {
-        recs.push({
-          type: 'warning',
-          icon: 'fas fa-piggy-bank',
-          title: 'Aumenta tus Ahorros',
-          description: 'Intenta ahorrar al menos el 20% de tus ingresos mensuales.'
-        })
+  name: 'UserDashboard',
+  data() {
+    return {
+      showNewCashFlowForm: false,
+      editingCashFlow: null,
+      cashFlowForm: {
+        title: '',
+        description: ''
       }
-
-      if (this.debtToIncomeRatio > 40) {
-        recs.push({
-          type: 'danger',
-          icon: 'fas fa-exclamation-triangle',
-          title: 'Reduce tus Deudas',
-          description: 'Tu nivel de deuda es alto. Considera estrategias de consolidación o reducción de deudas.'
-        })
-      }
-
-      if (this.fixedExpensesRatio > 50) {
-        recs.push({
-          type: 'warning',
-          icon: 'fas fa-home',
-          title: 'Revisa tus Gastos Fijos',
-          description: 'Tus gastos fijos son elevados. Busca formas de reducirlos.'
-        })
-      }
-
-      if (this.netCashFlow < 0) {
-        recs.push({
-          type: 'danger',
-          icon: 'fas fa-chart-line',
-          title: 'Flujo de Caja Negativo',
-          description: 'Estás gastando más de lo que ingresas. Revisa tus gastos y busca aumentar tus ingresos.'
-        })
-      }
-
-      if (this.emergencyFundProgress < 50) {
-        recs.push({
-          type: 'info',
-          icon: 'fas fa-shield-alt',
-          title: 'Fondo de Emergencia',
-          description: 'Tu fondo de emergencia está por debajo del 50%. Prioriza este ahorro.'
-        })
-      }
-
-      return recs
     }
   },
+  computed: {
+    ...mapGetters('auth', ['currentUser']),
+    ...mapGetters('cashFlow', ['allCashFlows', 'loading', 'error'])
+  },
   methods: {
-    ...mapMutations(['resetAllData']),
-    formatCurrency,
-    exportData() {
-      const data = JSON.stringify(this.financialData, null, 2)
-      const blob = new Blob([data], { type: 'application/json' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'finanzas-personales.json'
-      a.click()
-      window.URL.revokeObjectURL(url)
+    ...mapActions('auth', ['logout']),
+    ...mapActions('cashFlow', [
+      'fetchUserCashFlows',
+      'createCashFlow',
+      'updateCashFlow',
+      'deleteCashFlow'
+    ]),
+
+    formatDate(date) {
+      return new Date(date).toLocaleDateString()
     },
-    resetData() {
-      if (confirm('¿Estás seguro de que deseas reiniciar todos los datos? Esta acción no se puede deshacer.')) {
-        this.resetAllData()
+
+    async handleSubmit() {
+      try {
+        if (this.editingCashFlow) {
+          await this.updateCashFlow({
+            cashFlowId: this.editingCashFlow.id,
+            updateData: this.cashFlowForm
+          })
+        } else {
+          await this.createCashFlow({
+            userId: this.currentUser.uid,
+            cashFlowData: this.cashFlowForm
+          })
+        }
+        this.closeForm()
+        this.fetchUserCashFlows(this.currentUser.uid)
+      } catch (error) {
+        console.error('Error al guardar el flujo de caja:', error)
       }
     },
-    generateReport() {
-      // Implementar generación de reporte PDF
-      alert('Función de generación de reporte en desarrollo')
+
+    editCashFlow(cashFlow) {
+      this.editingCashFlow = cashFlow
+      this.cashFlowForm = { ...cashFlow }
+      this.showNewCashFlowForm = true
     },
-    showTips() {
-      // Implementar modal de consejos financieros
-      alert('Función de consejos financieros en desarrollo')
+
+    viewCashFlow(cashFlow) {
+      this.$router.push(`/cash-flow/${cashFlow.id}`)
+    },
+
+    async confirmDelete(cashFlow) {
+      if (confirm('¿Estás seguro de que deseas eliminar este flujo de caja?')) {
+        try {
+          await this.deleteCashFlow(cashFlow.id)
+          this.fetchUserCashFlows(this.currentUser.uid)
+        } catch (error) {
+          console.error('Error al eliminar el flujo de caja:', error)
+        }
+      }
+    },
+
+    closeForm() {
+      this.showNewCashFlowForm = false
+      this.editingCashFlow = null
+      this.cashFlowForm = {
+        title: '',
+        description: ''
+      }
+    }
+  },
+  async created() {
+    if (this.currentUser) {
+      await this.fetchUserCashFlows(this.currentUser.uid)
+    } else {
+      this.$router.push('/login')
     }
   }
 }
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 20px;
-  max-width: 1400px;
+.dashboard-container {
+  padding: 2rem;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -380,142 +183,168 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 2rem;
 }
 
-.financial-score {
+.user-actions {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 1rem;
 }
 
-.score-circle {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
+.logout-btn {
+  background-color: #f44336;
   color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
-.score-circle.excellent { background: #2e7d32; }
-.score-circle.good { background: #388e3c; }
-.score-circle.warning { background: #f57c00; }
-.score-circle.poor { background: #c62828; }
+.actions-bar {
+  margin-bottom: 2rem;
+}
 
-.score-details {
+.new-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.cash-flow-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.cash-flow-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.view-btn, .edit-btn, .delete-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
   flex: 1;
 }
 
-.score-details h3 {
-  margin: 0;
-  font-size: 1.2rem;
+.view-btn {
+  background-color: #2196F3;
+  color: white;
 }
 
-.score-details p {
-  margin: 5px 0 0;
+.edit-btn {
+  background-color: #FFC107;
+  color: black;
+}
+
+.delete-btn {
+  background-color: #f44336;
+  color: white;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.cancel-btn {
+  background-color: #9e9e9e;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.save-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  font-size: 1.2rem;
   color: #666;
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 20px;
-}
-
-.dashboard-card {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.summary-content,
-.analysis-content,
-.expenses-content,
-.goals-content {
-  margin-top: 20px;
-}
-
-.summary-item,
-.expense-item,
-.goal-item {
-  margin-bottom: 20px;
-}
-
-.indicator {
-  margin-bottom: 20px;
-}
-
-.indicator-header,
-.expense-header,
-.goal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.progress-bar {
-  height: 8px;
-  background: #e0e0e0;
+.error-message {
+  color: #f44336;
+  padding: 1rem;
+  border: 1px solid #f44336;
   border-radius: 4px;
-  margin: 0.5rem 0;
+  margin-bottom: 1rem;
 }
 
-.progress {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.3s ease;
+.no-data {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  font-size: 1.1rem;
 }
 
-.progress.good { background: #2e7d32; }
-.progress.warning { background: #f57c00; }
-.progress.poor { background: #c62828; }
-
-.value {
-  font-weight: bold;
-  color: var(--text-color);
-}
-
-.value.negative {
-  color: #c62828;
-}
-
-.recommendations {
-  list-style: none;
-  padding: 0;
-}
-
-.recommendations li {
-  margin-bottom: 0.75rem;
-  padding-left: 1.5rem;
-  position: relative;
-}
-
-.recommendations li::before {
-  content: "•";
-  position: absolute;
-  left: 0;
-  color: var(--primary-color);
-}
-
-@media (max-width: 1200px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 480px) {
-  .dashboard {
-    padding: 0.5rem;
-  }
-
-  .dashboard-card {
-    padding: 1rem;
-  }
+.date {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 }
 </style> 

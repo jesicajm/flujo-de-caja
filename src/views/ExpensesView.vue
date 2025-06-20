@@ -221,7 +221,7 @@
 <script>
 import { useVuelidate } from '@vuelidate/core'
 import { required, minValue, minLength } from '@vuelidate/validators'
-import { mapState, mapMutations, mapGetters } from 'vuex'
+import { mapState, mapGetters, mapActions } from 'vuex'
 import { unformatNumber, formatNumber, formatCurrency } from '@/utils/formatters'
 
 export default {
@@ -265,13 +265,14 @@ export default {
   },
   computed: {
     ...mapState({
-      fixedExpenseItems: state => state.financialData.expenses.fixed.items,
-      variableExpenseItems: state => state.financialData.expenses.variable.items,
-      customFixedExpenseItems: state => state.financialData.expenses.fixed.customItems,
-      customVariableExpenseItems: state => state.financialData.expenses.variable.customItems,
+      fixedExpenseItems: state => state.financialData.expenses.fixed.items || [],
+      variableExpenseItems: state => state.financialData.expenses.variable.items || [],
+      customFixedExpenseItems: state => state.financialData.expenses.fixed.customItems || [],
+      customVariableExpenseItems: state => state.financialData.expenses.variable.customItems || [],
       totalIncome: state => state.financialData.totalIncome
     }),
-    ...mapGetters([
+    ...mapState('auth', ['user']),
+    ...mapGetters('financialData', [
       'totalFixedExpenses',
       'totalVariableExpenses',
       'fixedExpensesRatio'
@@ -298,8 +299,25 @@ export default {
       return 'Gastos saludables'
     }
   },
+  async created() {
+    // Cargar datos financieros de Firestore al inicializar el componente
+    await this.loadFinancialData()
+  },
   methods: {
-    ...mapMutations(['updateExpenseItem', 'addCustomExpense', 'deleteCustomExpense']),
+    ...mapActions('financialData', ['fetchFinancialData']),
+    async loadFinancialData() {
+      if (this.user && this.user.uid) {
+        try {
+          console.log('🔄 Cargando datos financieros desde Firestore...')
+          await this.fetchFinancialData(this.user.uid)
+          console.log('✅ Datos financieros cargados correctamente')
+        } catch (error) {
+          console.error('❌ Error al cargar datos financieros:', error)
+        }
+      } else {
+        console.warn('⚠️ Usuario no autenticado, no se pueden cargar datos')
+      }
+    },
     formatNumber,
     formatCurrency,
     async handleInput(event, id, type, isCustom) {
@@ -312,7 +330,23 @@ export default {
       }
       
       this.clearError(id, type, isCustom)
-      this.updateExpense(id, numericValue, type, isCustom)
+      
+      // Usar action para guardar en Firestore
+      this.$store.dispatch('financialData/updateExpenseItem', { 
+        id, 
+        amount: numericValue, 
+        type, 
+        isCustom 
+      }).catch(error => {
+        console.error('Error al guardar en Firestore:', error)
+        // Fallback: actualizar solo localmente si falla Firestore
+        this.$store.commit('financialData/updateExpenseItem', { 
+          id, 
+          amount: numericValue, 
+          type, 
+          isCustom 
+        })
+      })
     },
     
     async handleNewExpenseInput(event, type) {
@@ -335,27 +369,35 @@ export default {
       const isValid = await validation.$validate()
       if (!isValid) return
       
-      this.$store.commit('addCustomExpense', {
+      const expenseData = {
         name: expense.name.trim(),
         amount: Number(unformatNumber(expense.amount)) || 0,
         type
+      }
+      
+      // Usar action para guardar en Firestore
+      this.$store.dispatch('financialData/addCustomExpense', expenseData).catch(error => {
+        console.error('Error al guardar en Firestore:', error)
+        // Fallback: actualizar solo localmente si falla Firestore
+        this.$store.commit('financialData/addCustomExpense', expenseData)
       })
       
       this.resetForm(type)
     },
     
-    updateExpense(id, amount, type, isCustom) {
-      this.updateExpenseItem({ 
-        id, 
-        amount: Number(amount), 
-        type, 
-        isCustom 
-      })
-    },
-    
-    deleteCustomExpense(id, type) {
+    async deleteCustomExpense(id, type) {
       if (confirm('¿Está seguro de que desea eliminar este gasto?')) {
-        this.$store.commit('deleteCustomExpense', { id, type })
+        try {
+          console.log('🗑️ Iniciando eliminación de gasto:', { id, type })
+          // Usar action para guardar en Firestore
+          await this.$store.dispatch('financialData/deleteCustomExpense', { id, type })
+          console.log('✅ Gasto eliminado correctamente de Firestore')
+        } catch (error) {
+          console.error('❌ Error al eliminar gasto de Firestore:', error)
+          // Fallback: actualizar solo localmente si falla Firestore
+          this.$store.commit('financialData/deleteCustomExpense', { id, type })
+          console.log('⚠️ Gasto eliminado solo localmente debido al error')
+        }
       }
     },
     

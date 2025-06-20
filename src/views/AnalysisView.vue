@@ -64,7 +64,7 @@ import { mapGetters } from 'vuex'
 export default {
   name: 'FinancialAnalysisView',
   computed: {
-    ...mapGetters([
+    ...mapGetters('financialData', [
       'netCashFlow',
       'savingsRate',
       'debtToIncomeRatio',
@@ -72,14 +72,14 @@ export default {
       'financialScore'
     ]),
     scoreClass() {
-      const score = this.calculateFinancialScore()
+      const score = this.financialScore
       if (score >= 80) return 'excellent'
       if (score >= 60) return 'good'
       if (score >= 40) return 'fair'
       return 'poor'
     },
     scoreLabel() {
-      const score = this.calculateFinancialScore()
+      const score = this.financialScore
       if (score >= 80) return 'Excelente'
       if (score >= 60) return 'Bueno'
       if (score >= 40) return 'Regular'

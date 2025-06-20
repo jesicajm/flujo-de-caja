@@ -305,7 +305,7 @@ export default {
       customDebtItems: state => state.financialData.debts.customItems,
       totalIncome: state => state.financialData.totalIncome
     }),
-    ...mapGetters([
+    ...mapGetters('financialData', [
       'totalMonthlyDebtPayments',
       'totalDebt',
       'debtToIncomeRatio'
@@ -337,7 +337,11 @@ export default {
     }
   },
   methods: {
-    ...mapMutations(['updateDebtItem', 'addCustomDebt', 'deleteCustomDebt']),
+    ...mapMutations('financialData', [
+      'updateDebtItem',
+      'addCustomDebt',
+      'deleteCustomDebt'
+    ]),
     formatNumber,
     formatCurrency,
     
@@ -384,7 +388,7 @@ export default {
       const isValid = await this.v$.newDebt.$validate()
       if (!isValid) return
       
-      this.$store.commit('addCustomDebt', {
+      this.$store.commit('financialData/addCustomDebt', {
         name: this.newDebt.name.trim(),
         monthlyPayment: Number(unformatNumber(this.newDebt.monthlyPayment)) || 0,
         totalDebt: Number(unformatNumber(this.newDebt.totalDebt)) || 0,
@@ -396,7 +400,7 @@ export default {
     
     deleteCustomDebt(id) {
       if (confirm('¿Está seguro de que desea eliminar esta deuda?')) {
-        this.$store.commit('deleteCustomDebt', { id })
+        this.$store.commit('financialData/deleteCustomDebt', { id })
       }
     },
     

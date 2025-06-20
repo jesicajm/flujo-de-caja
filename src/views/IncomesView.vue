@@ -96,7 +96,7 @@
 </template>
 
 <script>
-import { mapState, mapMutations, mapGetters } from 'vuex'
+import { mapState, mapGetters, mapActions } from 'vuex'
 import { formatNumber, unformatNumber, formatCurrency } from '@/utils/formatters'
 
 export default {
@@ -112,45 +112,90 @@ export default {
   },
   computed: {
     ...mapState({
-      incomeItems: state => state.financialData.incomes.items,
-      customIncomeItems: state => state.financialData.incomes.customItems
+      incomeItems: state => state.financialData.incomes.items || [],
+      customIncomeItems: state => state.financialData.incomes.customItems || []
     }),
-    ...mapGetters(['totalIncome']),
+    ...mapState('auth', ['user']),
+    ...mapGetters('financialData', ['totalIncome']),
     totalFixedIncome() {
-      return this.incomeItems.slice(0, 1).reduce((sum, item) => sum + item.amount, 0)
+      if (!this.incomeItems || this.incomeItems.length === 0) return 0
+      return this.incomeItems.slice(0, 1).reduce((sum, item) => sum + Number(item.amount || 0), 0)
     },
     totalVariableIncome() {
       return this.totalIncome - this.totalFixedIncome
     }
   },
+  async created() {
+    // Cargar datos financieros de Firestore al inicializar el componente
+    await this.loadFinancialData()
+  },
   methods: {
-    ...mapMutations(['updateIncomeItem', 'addCustomIncome', 'deleteCustomIncome']),
+    ...mapActions('financialData', ['fetchFinancialData']),
+    async loadFinancialData() {
+      if (this.user && this.user.uid) {
+        try {
+          console.log('🔄 Cargando datos financieros desde Firestore...')
+          await this.fetchFinancialData(this.user.uid)
+          console.log('✅ Datos financieros cargados correctamente')
+        } catch (error) {
+          console.error('❌ Error al cargar datos financieros:', error)
+        }
+      } else {
+        console.warn('⚠️ Usuario no autenticado, no se pueden cargar datos')
+      }
+    },
     handleInput(event, id, isCustom) {
       const value = event.target.value
       const numericValue = Number(unformatNumber(value))
-      this.updateIncome(id, numericValue, isCustom)
+      if (!isNaN(numericValue)) {
+        // Usar action para guardar en Firestore
+        this.$store.dispatch('financialData/updateIncomeItem', { 
+          id, 
+          amount: numericValue, 
+          isCustom 
+        }).catch(error => {
+          console.error('Error al guardar en Firestore:', error)
+          // Fallback: actualizar solo localmente si falla Firestore
+          this.$store.commit('financialData/updateIncomeItem', { 
+            id, 
+            amount: numericValue, 
+            isCustom 
+          })
+        })
+      }
     },
     handleNewIncomeInput(event) {
       const value = event.target.value
       this.newIncome.amount = unformatNumber(value)
-    },
-    updateIncome(id, amount, isCustom) {
-      this.updateIncomeItem({ id, amount, isCustom })
     },
     addCustomIncome() {
       if (!this.newIncome.name.trim()) {
         alert('Por favor, ingrese un nombre para el ingreso')
         return
       }
-      this.$store.commit('addCustomIncome', {
-        name: this.newIncome.name,
+      
+      const newIncomeData = {
+        name: this.newIncome.name.trim(),
         amount: Number(unformatNumber(this.newIncome.amount)) || 0
+      }
+      
+      // Usar action para guardar en Firestore
+      this.$store.dispatch('financialData/addCustomIncome', newIncomeData).catch(error => {
+        console.error('Error al guardar en Firestore:', error)
+        // Fallback: actualizar solo localmente si falla Firestore
+        this.$store.commit('financialData/addCustomIncome', newIncomeData)
       })
+      
       this.resetForm()
     },
     deleteCustomIncome(id) {
       if (confirm('¿Está seguro de que desea eliminar este ingreso?')) {
-        this.$store.commit('deleteCustomIncome', id)
+        // Usar action para guardar en Firestore
+        this.$store.dispatch('financialData/deleteCustomIncome', id).catch(error => {
+          console.error('Error al guardar en Firestore:', error)
+          // Fallback: actualizar solo localmente si falla Firestore
+          this.$store.commit('financialData/deleteCustomIncome', id)
+        })
       }
     },
     cancelAddIncome() {
@@ -310,7 +355,7 @@ input:focus {
 }
 
 .summary-item.total .value {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 @media (max-width: 768px) {
